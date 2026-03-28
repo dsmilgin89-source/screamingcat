@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://pagespeedonline.googleapis.com https://oauth2.googleapis.com https://analyticsdata.googleapis.com https://searchconsole.googleapis.com; frame-src 'self' data:"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://pagespeedonline.googleapis.com https://oauth2.googleapis.com https://analyticsdata.googleapis.com https://searchconsole.googleapis.com; frame-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'"
     }
   },
   "bundle": {

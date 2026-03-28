@@ -8,3 +8,4 @@ Thumbs.db
 ._*
 tsconfig.tsbuildinfo
 .claude/
+*.dmg

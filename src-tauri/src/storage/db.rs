@@ -1,4 +1,6 @@
-use crate::crawler::{CrawlResult, CustomFieldResult, HreflangEntry, ImageInfo, RedirectHop, StructuredDataItem};
+use crate::crawler::{
+    CrawlResult, CustomFieldResult, HreflangEntry, ImageInfo, RedirectHop, StructuredDataItem,
+};
 use rusqlite::{params, Connection};
 use std::io::Write;
 use std::sync::Mutex;
@@ -9,7 +11,8 @@ pub struct Database {
 
 impl Database {
     pub fn new(domain: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let sanitized: String = domain.chars()
+        let sanitized: String = domain
+            .chars()
             .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
             .take(64)
             .collect();
@@ -23,7 +26,7 @@ impl Database {
              PRAGMA synchronous = NORMAL;
              PRAGMA cache_size = -8000;
              PRAGMA mmap_size = 268435456;
-             PRAGMA temp_store = MEMORY;"
+             PRAGMA temp_store = MEMORY;",
         )?;
 
         conn.execute_batch(
@@ -153,9 +156,15 @@ impl Database {
         }
 
         // Create indexes (after migrations so columns exist)
-        let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON results(status_code)", []);
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_status ON results(status_code)",
+            [],
+        );
         let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_depth ON results(depth)", []);
-        let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_content_hash ON results(content_hash)", []);
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_content_hash ON results(content_hash)",
+            [],
+        );
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -170,21 +179,30 @@ impl Database {
             return Ok(());
         }
         // Pre-serialize all JSON outside the lock
-        let serialized: Vec<_> = results.iter().map(|result| {
-            (
-                serde_json::to_string(&result.custom_search_results).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.custom_extraction_results).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.images).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.hreflang).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.structured_data_types).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.structured_data).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.h2s).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.redirect_chain).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.response_headers).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.outlinks).unwrap_or_else(|_| "[]".to_string()),
-                serde_json::to_string(&result.h1_all).unwrap_or_else(|_| "[]".to_string()),
-            )
-        }).collect();
+        let serialized: Vec<_> = results
+            .iter()
+            .map(|result| {
+                (
+                    serde_json::to_string(&result.custom_search_results)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.custom_extraction_results)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.images).unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.hreflang).unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.structured_data_types)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.structured_data)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.h2s).unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.redirect_chain)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.response_headers)
+                        .unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.outlinks).unwrap_or_else(|_| "[]".to_string()),
+                    serde_json::to_string(&result.h1_all).unwrap_or_else(|_| "[]".to_string()),
+                )
+            })
+            .collect();
 
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute_batch("BEGIN")?;
@@ -216,28 +234,68 @@ impl Database {
                         ?52, ?53, ?54, ?55, ?56, ?57,
                         ?58, ?59, ?60, ?61, ?62)",
                 params![
-                    result.url, result.status_code, result.content_type,
-                    result.response_time_ms, result.content_length,
-                    result.title, result.meta_description, result.h1,
-                    result.h2_count, result.canonical, result.robots_meta,
-                    result.word_count, result.internal_links, result.external_links,
-                    result.depth, result.redirect_url, result.indexable as i32,
-                    json.0, json.1, json.2, result.images_count, result.images_missing_alt,
-                    json.3, json.4, json.5,
-                    result.og_title, result.og_description, result.og_image,
-                    result.twitter_card, result.twitter_title,
-                    result.meta_keywords, json.6,
-                    result.css_count, result.js_count, result.inline_css_count, result.inline_js_count,
-                    result.total_resource_size, result.dom_depth, result.text_ratio,
-                    result.has_viewport_meta as i32, result.has_charset as i32, result.has_doctype as i32,
-                    json.7, result.content_hash, json.8,
-                    result.meta_refresh, result.rel_next, result.rel_prev,
-                    result.robots_blocked as i32, result.in_sitemap as i32, json.9,
-                    result.has_hsts as i32, result.has_csp as i32,
-                    result.has_x_frame_options as i32, result.has_x_content_type_options as i32,
-                    result.mixed_content_count, result.insecure_form_count,
-                    result.title_count, result.h1_count, json.10,
-                    result.meta_description_count, result.lang_attribute,
+                    result.url,
+                    result.status_code,
+                    result.content_type,
+                    result.response_time_ms,
+                    result.content_length,
+                    result.title,
+                    result.meta_description,
+                    result.h1,
+                    result.h2_count,
+                    result.canonical,
+                    result.robots_meta,
+                    result.word_count,
+                    result.internal_links,
+                    result.external_links,
+                    result.depth,
+                    result.redirect_url,
+                    result.indexable as i32,
+                    json.0,
+                    json.1,
+                    json.2,
+                    result.images_count,
+                    result.images_missing_alt,
+                    json.3,
+                    json.4,
+                    json.5,
+                    result.og_title,
+                    result.og_description,
+                    result.og_image,
+                    result.twitter_card,
+                    result.twitter_title,
+                    result.meta_keywords,
+                    json.6,
+                    result.css_count,
+                    result.js_count,
+                    result.inline_css_count,
+                    result.inline_js_count,
+                    result.total_resource_size,
+                    result.dom_depth,
+                    result.text_ratio,
+                    result.has_viewport_meta as i32,
+                    result.has_charset as i32,
+                    result.has_doctype as i32,
+                    json.7,
+                    result.content_hash,
+                    json.8,
+                    result.meta_refresh,
+                    result.rel_next,
+                    result.rel_prev,
+                    result.robots_blocked as i32,
+                    result.in_sitemap as i32,
+                    json.9,
+                    result.has_hsts as i32,
+                    result.has_csp as i32,
+                    result.has_x_frame_options as i32,
+                    result.has_x_content_type_options as i32,
+                    result.mixed_content_count,
+                    result.insecure_form_count,
+                    result.title_count,
+                    result.h1_count,
+                    json.10,
+                    result.meta_description_count,
+                    result.lang_attribute,
                 ],
             )?;
         }
@@ -399,10 +457,7 @@ impl Database {
         Ok(results)
     }
 
-    pub fn export_csv(
-        &self,
-        path: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn export_csv(&self, path: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT url, status_code, content_type, response_time_ms, content_length,

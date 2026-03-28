@@ -74,9 +74,17 @@ pub struct UserAgentConfig {
 }
 
 // ── Robots ──
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RobotsMode {
+    Respect,
+    Ignore,
+    IgnoreButReport,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RobotsConfig {
-    pub mode: String,
+    pub mode: RobotsMode,
     pub show_blocked_internal: bool,
     pub show_blocked_external: bool,
 }
@@ -126,9 +134,16 @@ pub struct AdvancedConfig {
 }
 
 // ── Rendering ──
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderingMode {
+    TextOnly,
+    Javascript,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RenderingConfig {
-    pub rendering_mode: String,         // "text_only" | "javascript"
+    pub rendering_mode: RenderingMode,
     pub ajax_timeout_seconds: u32,
     pub viewport_width: u32,
     pub viewport_height: u32,
@@ -136,12 +151,26 @@ pub struct RenderingConfig {
 }
 
 // ── Custom Search ──
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchMode {
+    Contains,
+    Regex,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchTarget {
+    Html,
+    Text,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomSearchRule {
     pub name: String,
     pub pattern: String,
-    pub mode: String,      // "contains" | "regex"
-    pub search_in: String, // "html" | "text"
+    pub mode: SearchMode,
+    pub search_in: SearchTarget,
     #[serde(default)]
     pub case_sensitive: bool,
 }
@@ -160,12 +189,28 @@ pub struct CustomHeader {
 }
 
 // ── Custom Extraction ──
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionMode {
+    CssSelector,
+    Xpath,
+    Regex,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionTarget {
+    InnerHtml,
+    Text,
+    Attribute,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomExtractionRule {
     pub name: String,
     pub selector: String,
-    pub mode: String,      // "css_selector" | "xpath" | "regex"
-    pub target: String,    // "inner_html" | "text" | "attribute"
+    pub mode: ExtractionMode,
+    pub target: ExtractionTarget,
     pub attribute: String,
 }
 
@@ -264,7 +309,7 @@ impl Default for CrawlConfig {
                 custom_ua: String::new(),
             },
             robots: RobotsConfig {
-                mode: "respect".to_string(),
+                mode: RobotsMode::Respect,
                 show_blocked_internal: true,
                 show_blocked_external: false,
             },
@@ -304,7 +349,7 @@ impl Default for CrawlConfig {
                 low_content_word_count: 200,
             },
             rendering: RenderingConfig {
-                rendering_mode: "text_only".to_string(),
+                rendering_mode: RenderingMode::TextOnly,
                 ajax_timeout_seconds: 5,
                 viewport_width: 1280,
                 viewport_height: 800,
@@ -338,10 +383,7 @@ async fn start_crawl(
 ) -> Result<String, String> {
     let engine = state.engine.clone();
     let mut engine = engine.lock().await;
-    engine
-        .start(config, app)
-        .await
-        .map_err(|e| e.to_string())?;
+    engine.start(config, app).await.map_err(|e| e.to_string())?;
     Ok("Crawl started".to_string())
 }
 
@@ -403,13 +445,21 @@ async fn export_csv(path: String, state: State<'_, AppState>) -> Result<String, 
 // ══════════════════════════════════════════════════════
 
 #[tauri::command]
-async fn save_crawl_snapshot(name: String, storage_config: Option<storage::snapshots::StorageConfig>, state: State<'_, AppState>) -> Result<storage::snapshots::SnapshotMeta, String> {
+async fn save_crawl_snapshot(
+    name: String,
+    storage_config: Option<storage::snapshots::StorageConfig>,
+    state: State<'_, AppState>,
+) -> Result<storage::snapshots::SnapshotMeta, String> {
     let engine = state.engine.clone();
     let engine = engine.lock().await;
-    let results = engine.get_results(0, 100000).await.map_err(|e| e.to_string())?;
+    let results = engine
+        .get_results(0, 100000)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let domain = if let Some(first) = results.first() {
-        url::Url::parse(&first.url).ok()
+        url::Url::parse(&first.url)
+            .ok()
             .and_then(|u| u.domain().map(|d| d.to_string()))
             .unwrap_or_default()
     } else {
@@ -435,11 +485,19 @@ async fn save_crawl_snapshot(name: String, storage_config: Option<storage::snaps
             _ => {}
         }
         total_response_ms += r.response_time_ms;
-        if r.indexable { indexable_count += 1; } else { non_indexable_count += 1; }
+        if r.indexable {
+            indexable_count += 1;
+        } else {
+            non_indexable_count += 1;
+        }
         total_word_count += r.word_count as u64;
     }
 
-    let avg_response_ms = if results.is_empty() { 0 } else { total_response_ms / results.len() as u64 };
+    let avg_response_ms = if results.is_empty() {
+        0
+    } else {
+        total_response_ms / results.len() as u64
+    };
 
     let meta = storage::snapshots::SnapshotMeta {
         id: uuid::Uuid::new_v4().to_string(),
@@ -458,8 +516,9 @@ async fn save_crawl_snapshot(name: String, storage_config: Option<storage::snaps
         size_bytes: 0, // will be updated during save
     };
 
-    let rows: Vec<storage::snapshots::SnapshotRow> = results.iter().map(|r| {
-        storage::snapshots::SnapshotRow {
+    let rows: Vec<storage::snapshots::SnapshotRow> = results
+        .iter()
+        .map(|r| storage::snapshots::SnapshotRow {
             url: r.url.clone(),
             status_code: r.status_code,
             title: r.title.clone(),
@@ -469,8 +528,8 @@ async fn save_crawl_snapshot(name: String, storage_config: Option<storage::snaps
             canonical: r.canonical.clone(),
             indexable: r.indexable,
             content_hash: r.content_hash.clone(),
-        }
-    }).collect();
+        })
+        .collect();
 
     let cfg = storage_config.unwrap_or_default();
     storage::snapshots::save_snapshot_with_config(&meta, &rows, &cfg).map_err(|e| e.to_string())?;
@@ -478,32 +537,45 @@ async fn save_crawl_snapshot(name: String, storage_config: Option<storage::snaps
 }
 
 #[tauri::command]
-async fn list_crawl_snapshots(storage_config: Option<storage::snapshots::StorageConfig>) -> Result<Vec<storage::snapshots::SnapshotMeta>, String> {
+async fn list_crawl_snapshots(
+    storage_config: Option<storage::snapshots::StorageConfig>,
+) -> Result<Vec<storage::snapshots::SnapshotMeta>, String> {
     let cfg = storage_config.unwrap_or_default();
     Ok(storage::snapshots::list_snapshots_with_config(&cfg))
 }
 
 #[tauri::command]
-async fn delete_crawl_snapshot(id: String, storage_config: Option<storage::snapshots::StorageConfig>) -> Result<String, String> {
+async fn delete_crawl_snapshot(
+    id: String,
+    storage_config: Option<storage::snapshots::StorageConfig>,
+) -> Result<String, String> {
     let cfg = storage_config.unwrap_or_default();
     storage::snapshots::delete_snapshot_with_config(&id, &cfg).map_err(|e| e.to_string())?;
     Ok("Deleted".to_string())
 }
 
 #[tauri::command]
-async fn compare_crawl_snapshots(id_a: String, id_b: String, storage_config: Option<storage::snapshots::StorageConfig>) -> Result<storage::snapshots::CrawlComparison, String> {
+async fn compare_crawl_snapshots(
+    id_a: String,
+    id_b: String,
+    storage_config: Option<storage::snapshots::StorageConfig>,
+) -> Result<storage::snapshots::CrawlComparison, String> {
     let cfg = storage_config.unwrap_or_default();
     storage::snapshots::compare_snapshots_with_config(&id_a, &id_b, &cfg).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_storage_stats(storage_config: Option<storage::snapshots::StorageConfig>) -> Result<storage::snapshots::StorageStats, String> {
+async fn get_storage_stats(
+    storage_config: Option<storage::snapshots::StorageConfig>,
+) -> Result<storage::snapshots::StorageStats, String> {
     let cfg = storage_config.unwrap_or_default();
     Ok(storage::snapshots::get_storage_stats(&cfg))
 }
 
 #[tauri::command]
-async fn cleanup_snapshots(storage_config: Option<storage::snapshots::StorageConfig>) -> Result<u32, String> {
+async fn cleanup_snapshots(
+    storage_config: Option<storage::snapshots::StorageConfig>,
+) -> Result<u32, String> {
     let cfg = storage_config.unwrap_or_default();
     Ok(storage::snapshots::cleanup_snapshots(&cfg))
 }
@@ -515,17 +587,25 @@ async fn cleanup_snapshots(storage_config: Option<storage::snapshots::StorageCon
 /// Validate that a file path is safe for I/O (no system dirs, no traversal)
 fn validate_file_path(path: &str) -> Result<std::path::PathBuf, String> {
     let p = std::path::PathBuf::from(path);
-    let canonical = p.parent()
+    let canonical = p
+        .parent()
         .and_then(|parent| std::fs::canonicalize(parent).ok())
         .map(|parent| parent.join(p.file_name().unwrap_or_default()))
         .unwrap_or_else(|| p.clone());
 
     // Block system-critical directories
     let path_str = canonical.to_string_lossy().to_lowercase();
-    let blocked = ["\\windows\\", "\\system32", "/etc/", "/usr/", "/bin/", "/sbin/"];
+    let blocked = [
+        "\\windows\\",
+        "\\system32",
+        "/etc/",
+        "/usr/",
+        "/bin/",
+        "/sbin/",
+    ];
     for b in &blocked {
         if path_str.contains(b) {
-            return Err(format!("Access denied: cannot write to system directory"));
+            return Err("Access denied: cannot write to system directory".to_string());
         }
     }
     Ok(canonical)
@@ -580,8 +660,7 @@ async fn run_pagespeed_batch(
     let total = urls.len();
 
     for (i, url) in urls.iter().enumerate() {
-        let result =
-            integrations::pagespeed::analyze_url(url, &api_key, &strategy).await;
+        let result = integrations::pagespeed::analyze_url(url, &api_key, &strategy).await;
         results.push(result.clone());
 
         // Emit progress event
@@ -610,11 +689,9 @@ async fn google_oauth_connect(
     client_secret: String,
     scopes: String,
 ) -> Result<GoogleTokens, String> {
-    let (code, port) =
-        integrations::google_auth::start_oauth_flow(&client_id, &scopes).await?;
+    let (code, port) = integrations::google_auth::start_oauth_flow(&client_id, &scopes).await?;
     let tokens =
-        integrations::google_auth::exchange_code(&client_id, &client_secret, &code, port)
-            .await?;
+        integrations::google_auth::exchange_code(&client_id, &client_secret, &code, port).await?;
     Ok(tokens)
 }
 
@@ -636,13 +713,8 @@ async fn fetch_gsc_pages(
     start_date: String,
     end_date: String,
 ) -> Result<Vec<GscPageData>, String> {
-    integrations::search_console::fetch_page_data(
-        &site_url,
-        &access_token,
-        &start_date,
-        &end_date,
-    )
-    .await
+    integrations::search_console::fetch_page_data(&site_url, &access_token, &start_date, &end_date)
+        .await
 }
 
 /// Fetch Google Search Console query data
@@ -653,13 +725,8 @@ async fn fetch_gsc_queries(
     start_date: String,
     end_date: String,
 ) -> Result<Vec<GscQueryData>, String> {
-    integrations::search_console::fetch_query_data(
-        &site_url,
-        &access_token,
-        &start_date,
-        &end_date,
-    )
-    .await
+    integrations::search_console::fetch_query_data(&site_url, &access_token, &start_date, &end_date)
+        .await
 }
 
 /// Fetch Google Analytics 4 page data
@@ -670,13 +737,8 @@ async fn fetch_ga_pages(
     start_date: String,
     end_date: String,
 ) -> Result<Vec<GaPageData>, String> {
-    integrations::analytics::fetch_page_data(
-        &property_id,
-        &access_token,
-        &start_date,
-        &end_date,
-    )
-    .await
+    integrations::analytics::fetch_page_data(&property_id, &access_token, &start_date, &end_date)
+        .await
 }
 
 #[tauri::command]
@@ -701,8 +763,11 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     let mut buf: u32 = 0;
     let mut bits: u32 = 0;
     for &byte in input.as_bytes() {
-        let val = TABLE.iter().position(|&b| b == byte)
-            .ok_or_else(|| format!("Invalid base64 character: {}", byte as char))? as u32;
+        let val = TABLE
+            .iter()
+            .position(|&b| b == byte)
+            .ok_or_else(|| format!("Invalid base64 character: {}", byte as char))?
+            as u32;
         buf = (buf << 6) | val;
         bits += 6;
         if bits >= 8 {
@@ -716,13 +781,22 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize structured logging
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .with_target(true)
+        .init();
+
     // Log panics to a file for diagnostics (especially in release builds without console)
     std::panic::set_hook(Box::new(|info| {
         let bt = std::backtrace::Backtrace::force_capture();
         let msg = format!("PANIC: {}\nBacktrace:\n{}", info, bt);
         let log_path = std::env::temp_dir().join("screamingcat_crash.log");
         let _ = std::fs::write(&log_path, &msg);
-        eprintln!("{}", msg);
+        tracing::error!("{}", msg);
     }));
 
     tauri::Builder::default()

@@ -152,11 +152,12 @@ impl JsRenderer {
             ..LaunchOptions::default()
         };
 
-        let browser = Browser::new(launch_options)
-            .map_err(|e| format!(
+        let browser = Browser::new(launch_options).map_err(|e| {
+            format!(
                 "Failed to launch browser: {}. Install Chrome, Edge, Brave, Opera, or Vivaldi.",
                 e
-            ))?;
+            )
+        })?;
 
         Ok(Self {
             browser: Mutex::new(browser),
@@ -165,11 +166,15 @@ impl JsRenderer {
     }
 
     /// Navigate to a URL, wait for JS to execute, and return the rendered DOM HTML.
-    pub fn render_page(&self, url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn render_page(
+        &self,
+        url: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Lock only briefly to create a new tab — tabs are independent and thread-safe
         let tab = {
             let browser = self.browser.lock().unwrap_or_else(|e| e.into_inner());
-            browser.new_tab()
+            browser
+                .new_tab()
                 .map_err(|e| format!("Failed to open browser tab: {}", e))?
         }; // mutex released here — other threads can create tabs concurrently
 
@@ -183,13 +188,17 @@ impl JsRenderer {
             .map_err(|e| format!("Wait failed for {}: {}", url, e))?;
 
         // Wait for content to load — try waiting for body element first, fall back to sleep
-        if tab.wait_for_element_with_custom_timeout("body", self.ajax_timeout).is_err() {
+        if tab
+            .wait_for_element_with_custom_timeout("body", self.ajax_timeout)
+            .is_err()
+        {
             // If body wait fails, sleep for the full timeout as fallback
             std::thread::sleep(self.ajax_timeout);
         }
 
         // Extract the fully rendered DOM
-        let rendered_html = tab.get_content()
+        let rendered_html = tab
+            .get_content()
             .map_err(|e| format!("Failed to get rendered HTML for {}: {}", url, e))?;
 
         Ok(rendered_html)

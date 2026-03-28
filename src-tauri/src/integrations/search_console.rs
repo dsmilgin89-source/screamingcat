@@ -36,7 +36,11 @@ struct GscApiRow {
 /// Normalize URL for matching: remove trailing slash
 fn normalize_url(url: &str) -> String {
     let trimmed = url.trim_end_matches('/');
-    if trimmed.is_empty() { url.to_string() } else { trimmed.to_string() }
+    if trimmed.is_empty() {
+        url.to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Fetch Search Console data grouped by page
@@ -72,9 +76,15 @@ pub async fn fetch_page_data(
         let status = resp.status().as_u16();
         let _text = resp.text().await.unwrap_or_default();
         if status == 401 {
-            return Err("GSC authentication expired. Please reconnect in Settings → Integrations.".to_string());
+            return Err(
+                "GSC authentication expired. Please reconnect in Settings → Integrations."
+                    .to_string(),
+            );
         }
-        return Err(format!("GSC API returned status {}. Please verify your Site URL and permissions.", status));
+        return Err(format!(
+            "GSC API returned status {}. Please verify your Site URL and permissions.",
+            status
+        ));
     }
 
     let data: GscApiResponse = resp
@@ -130,7 +140,10 @@ pub async fn fetch_query_data(
         let status = resp.status().as_u16();
         let _text = resp.text().await.unwrap_or_default();
         if status == 401 {
-            return Err("GSC authentication expired. Please reconnect in Settings → Integrations.".to_string());
+            return Err(
+                "GSC authentication expired. Please reconnect in Settings → Integrations."
+                    .to_string(),
+            );
         }
         return Err(format!("GSC API returned status {}.", status));
     }

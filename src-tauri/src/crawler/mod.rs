@@ -4,6 +4,32 @@ pub mod sitemap_parser;
 
 use serde::{Deserialize, Serialize};
 
+/// Two-part TLDs for correct root domain extraction
+const TWO_PART_TLDS: &[&str] = &[
+    "co.uk", "co.jp", "co.kr", "co.nz", "co.za", "co.in", "co.id", "com.au", "com.br", "com.pl",
+    "com.ua", "com.tr", "com.mx", "com.ar", "com.cn", "com.tw", "com.hk", "com.sg", "org.uk",
+    "org.au", "org.pl", "net.au", "net.pl",
+];
+
+/// Extract the registrable root domain from a hostname (e.g. "blog.example.co.uk" -> "example.co.uk")
+pub fn extract_root_domain(domain: &str) -> String {
+    let domain = domain.trim_start_matches("www.");
+    let parts: Vec<&str> = domain.split('.').collect();
+
+    if parts.len() >= 3 {
+        let last_two = format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1]);
+        if TWO_PART_TLDS.contains(&last_two.as_str()) {
+            return parts[parts.len() - 3..].join(".");
+        }
+    }
+
+    if parts.len() >= 2 {
+        return parts[parts.len() - 2..].join(".");
+    }
+
+    domain.to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomFieldResult {
     pub name: String,

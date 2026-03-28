@@ -58,23 +58,12 @@ pub struct CrawlComparison {
     pub changed: Vec<UrlDiff>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct StorageConfig {
-    pub custom_path: String,       // empty = default location
-    pub retention_days: u32,       // 0 = forever
-    pub max_snapshots: u32,        // 0 = unlimited
-    pub auto_save: bool,           // auto-save after each crawl
-}
-
-impl Default for StorageConfig {
-    fn default() -> Self {
-        Self {
-            custom_path: String::new(),
-            retention_days: 0,
-            max_snapshots: 0,
-            auto_save: false,
-        }
-    }
+    pub custom_path: String, // empty = default location
+    pub retention_days: u32, // 0 = forever
+    pub max_snapshots: u32,  // 0 = unlimited
+    pub auto_save: bool,     // auto-save after each crawl
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -109,7 +98,6 @@ pub fn get_snapshots_dir_with_config(config: &StorageConfig) -> PathBuf {
     }
     dir
 }
-
 
 pub fn save_snapshot_with_config(
     meta: &SnapshotMeta,
@@ -213,14 +201,38 @@ pub fn compare_snapshots_with_config(
     for (url, row_a) in &map_a {
         if let Some(row_b) = map_b.get(url) {
             let fields: Vec<(&str, String, String)> = vec![
-                ("status_code", row_a.status_code.to_string(), row_b.status_code.to_string()),
+                (
+                    "status_code",
+                    row_a.status_code.to_string(),
+                    row_b.status_code.to_string(),
+                ),
                 ("title", row_a.title.clone(), row_b.title.clone()),
-                ("meta_description", row_a.meta_description.clone(), row_b.meta_description.clone()),
+                (
+                    "meta_description",
+                    row_a.meta_description.clone(),
+                    row_b.meta_description.clone(),
+                ),
                 ("h1", row_a.h1.clone(), row_b.h1.clone()),
-                ("word_count", row_a.word_count.to_string(), row_b.word_count.to_string()),
-                ("canonical", row_a.canonical.clone(), row_b.canonical.clone()),
-                ("indexable", row_a.indexable.to_string(), row_b.indexable.to_string()),
-                ("content_hash", row_a.content_hash.clone(), row_b.content_hash.clone()),
+                (
+                    "word_count",
+                    row_a.word_count.to_string(),
+                    row_b.word_count.to_string(),
+                ),
+                (
+                    "canonical",
+                    row_a.canonical.clone(),
+                    row_b.canonical.clone(),
+                ),
+                (
+                    "indexable",
+                    row_a.indexable.to_string(),
+                    row_b.indexable.to_string(),
+                ),
+                (
+                    "content_hash",
+                    row_a.content_hash.clone(),
+                    row_b.content_hash.clone(),
+                ),
             ];
             for (field, old_val, new_val) in fields {
                 if old_val != new_val {
@@ -256,9 +268,10 @@ pub fn get_storage_stats(config: &StorageConfig) -> StorageStats {
             .unwrap_or(snap.size_bytes);
         total_size += file_size;
 
-        let entry = domain_map
-            .entry(snap.domain.clone())
-            .or_insert((0, snap.created_at.clone(), 0));
+        let entry =
+            domain_map
+                .entry(snap.domain.clone())
+                .or_insert((0, snap.created_at.clone(), 0));
         entry.0 += 1;
         if snap.created_at > entry.1 {
             entry.1 = snap.created_at.clone();
@@ -276,8 +289,14 @@ pub fn get_storage_stats(config: &StorageConfig) -> StorageStats {
         })
         .collect();
 
-    let oldest = snapshots.first().map(|s| s.created_at.clone()).unwrap_or_default();
-    let newest = snapshots.last().map(|s| s.created_at.clone()).unwrap_or_default();
+    let oldest = snapshots
+        .first()
+        .map(|s| s.created_at.clone())
+        .unwrap_or_default();
+    let newest = snapshots
+        .last()
+        .map(|s| s.created_at.clone())
+        .unwrap_or_default();
 
     StorageStats {
         total_snapshots: snapshots.len() as u32,
@@ -289,7 +308,7 @@ pub fn get_storage_stats(config: &StorageConfig) -> StorageStats {
     }
 }
 
-fn enforce_retention(dir: &PathBuf, config: &StorageConfig) {
+fn enforce_retention(dir: &std::path::Path, config: &StorageConfig) {
     let index_path = dir.join("index.json");
     if !index_path.exists() {
         return;
@@ -330,7 +349,10 @@ fn enforce_retention(dir: &PathBuf, config: &StorageConfig) {
     }
 
     if index.len() != original_len {
-        let _ = std::fs::write(&index_path, serde_json::to_string_pretty(&index).unwrap_or_default());
+        let _ = std::fs::write(
+            &index_path,
+            serde_json::to_string_pretty(&index).unwrap_or_default(),
+        );
     }
 }
 

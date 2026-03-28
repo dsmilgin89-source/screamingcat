@@ -8,12 +8,12 @@ pub struct PageSpeedResult {
     pub best_practices_score: f64,
     pub seo_score: f64,
     // Core Web Vitals
-    pub fcp_ms: f64,           // First Contentful Paint
-    pub lcp_ms: f64,           // Largest Contentful Paint
-    pub tbt_ms: f64,           // Total Blocking Time
-    pub cls: f64,              // Cumulative Layout Shift
-    pub speed_index_ms: f64,   // Speed Index
-    pub tti_ms: f64,           // Time to Interactive
+    pub fcp_ms: f64,         // First Contentful Paint
+    pub lcp_ms: f64,         // Largest Contentful Paint
+    pub tbt_ms: f64,         // Total Blocking Time
+    pub cls: f64,            // Cumulative Layout Shift
+    pub speed_index_ms: f64, // Speed Index
+    pub tti_ms: f64,         // Time to Interactive
     /// Non-empty if analysis failed
     pub error: String,
     /// True if analysis was successfully completed
@@ -88,13 +88,10 @@ pub async fn analyze_url(
     let categories = &body["lighthouseResult"]["categories"];
     let audits = &body["lighthouseResult"]["audits"];
 
-    let score = |cat: &str| -> f64 {
-        categories[cat]["score"].as_f64().unwrap_or(0.0) * 100.0
-    };
+    let score = |cat: &str| -> f64 { categories[cat]["score"].as_f64().unwrap_or(0.0) * 100.0 };
 
-    let metric = |audit_id: &str| -> f64 {
-        audits[audit_id]["numericValue"].as_f64().unwrap_or(0.0)
-    };
+    let metric =
+        |audit_id: &str| -> f64 { audits[audit_id]["numericValue"].as_f64().unwrap_or(0.0) };
 
     PageSpeedResult {
         url: url.to_string(),

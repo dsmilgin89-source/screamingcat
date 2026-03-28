@@ -13,6 +13,7 @@ pub struct GoogleTokens {
 }
 
 impl GoogleTokens {
+    #[allow(dead_code)]
     pub fn is_expired(&self) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -57,10 +58,7 @@ fn random_string(len: usize) -> String {
 /// Start OAuth2 flow: opens browser and waits for callback on a local port.
 /// Returns the authorization code and port. Uses CSRF state parameter.
 /// Runs blocking TCP listener in spawn_blocking to not block the async runtime.
-pub async fn start_oauth_flow(
-    client_id: &str,
-    scopes: &str,
-) -> Result<(String, u16), String> {
+pub async fn start_oauth_flow(client_id: &str, scopes: &str) -> Result<(String, u16), String> {
     let client_id = client_id.to_string();
     let scopes = scopes.to_string();
 
@@ -229,7 +227,9 @@ pub async fn exchange_code(
 
     if !resp.status().is_success() {
         let _text = resp.text().await.unwrap_or_default();
-        return Err("Token exchange failed. Please check your OAuth credentials and try again.".to_string());
+        return Err(
+            "Token exchange failed. Please check your OAuth credentials and try again.".to_string(),
+        );
     }
 
     let token_resp: TokenResponse = resp
@@ -289,9 +289,7 @@ fn extract_param(request: &str, key: &str) -> Option<String> {
     let path = first_line.split_whitespace().nth(1)?;
     let query = path.split('?').nth(1)?;
     for pair in query.split('&') {
-        let mut parts = pair.splitn(2, '=');
-        let k = parts.next()?;
-        let v = parts.next()?;
+        let (k, v) = pair.split_once('=')?;
         if k == key {
             return Some(urldecoding(v));
         }
@@ -325,10 +323,8 @@ fn urldecoding(s: &str) -> String {
             continue;
         }
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                &String::from_utf8_lossy(&bytes[i + 1..i + 3]),
-                16,
-            ) {
+            if let Ok(byte) = u8::from_str_radix(&String::from_utf8_lossy(&bytes[i + 1..i + 3]), 16)
+            {
                 result.push(byte);
                 i += 3;
                 continue;

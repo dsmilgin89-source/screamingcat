@@ -50,8 +50,8 @@ export function CrawlHistoryPanel({ onClose, storageConfig, hasResults }: CrawlH
     try {
       const result = await invoke<SnapshotMeta[]>("list_crawl_snapshots", { storageConfig });
       setSnapshots(result);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to load snapshots:", e);
     }
     setLoading(false);
   }, [storageConfig]);
@@ -65,8 +65,8 @@ export function CrawlHistoryPanel({ onClose, storageConfig, hasResults }: CrawlH
       await invoke("save_crawl_snapshot", { name: saveName.trim(), storageConfig });
       setSaveName("");
       loadSnapshots();
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to save snapshot:", e);
     }
     setSaving(false);
   };
@@ -91,8 +91,8 @@ export function CrawlHistoryPanel({ onClose, storageConfig, hasResults }: CrawlH
         idA, idB, storageConfig
       });
       setComparison(result);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to compare snapshots:", e);
     }
     setComparing(false);
   };

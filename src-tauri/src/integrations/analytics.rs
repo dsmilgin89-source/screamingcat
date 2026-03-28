@@ -6,8 +6,8 @@ pub struct GaPageData {
     pub sessions: f64,
     pub users: f64,
     pub page_views: f64,
-    pub avg_engagement_time: f64,  // in seconds
-    pub bounce_rate: f64,          // percentage
+    pub avg_engagement_time: f64, // in seconds
+    pub bounce_rate: f64,         // percentage
     pub conversions: f64,
 }
 
@@ -43,9 +43,14 @@ pub async fn fetch_page_data(
 
     // Validate date format (YYYY-MM-DD)
     let date_ok = |d: &str| -> bool {
-        d.len() == 10 && d.chars().enumerate().all(|(i, c)| {
-            if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() }
-        })
+        d.len() == 10
+            && d.chars().enumerate().all(|(i, c)| {
+                if i == 4 || i == 7 {
+                    c == '-'
+                } else {
+                    c.is_ascii_digit()
+                }
+            })
     };
     if !date_ok(start_date) || !date_ok(end_date) {
         return Err("Dates must be in YYYY-MM-DD format".to_string());
@@ -89,9 +94,15 @@ pub async fn fetch_page_data(
         let status = resp.status().as_u16();
         let _text = resp.text().await.unwrap_or_default();
         if status == 401 {
-            return Err("GA4 authentication expired. Please reconnect in Settings → Integrations.".to_string());
+            return Err(
+                "GA4 authentication expired. Please reconnect in Settings → Integrations."
+                    .to_string(),
+            );
         }
-        return Err(format!("GA4 API returned status {}. Please verify your Property ID and permissions.", status));
+        return Err(format!(
+            "GA4 API returned status {}. Please verify your Property ID and permissions.",
+            status
+        ));
     }
 
     let data: Ga4Response = resp
@@ -131,5 +142,9 @@ pub async fn fetch_page_data(
 fn normalize_url(url: &str) -> String {
     // Remove trailing slash for path-only URLs, but keep the full URL
     let trimmed = url.trim_end_matches('/');
-    if trimmed.is_empty() { url.to_string() } else { trimmed.to_string() }
+    if trimmed.is_empty() {
+        url.to_string()
+    } else {
+        trimmed.to_string()
+    }
 }

@@ -2,6 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sitemap::reader::{SiteMapEntity, SiteMapReader};
 use std::io::Cursor;
+use tracing::warn;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SitemapUrl {
@@ -36,7 +37,7 @@ pub async fn fetch_and_parse_sitemaps(
                 to_fetch.extend(sub_sitemaps);
             }
             Err(e) => {
-                eprintln!("Failed to parse sitemap {}: {}", sitemap_url, e);
+                warn!(url = %sitemap_url, error = %e, "failed to parse sitemap");
             }
         }
     }
@@ -96,7 +97,7 @@ async fn fetch_single_sitemap(
                 }
             }
             SiteMapEntity::Err(e) => {
-                eprintln!("Sitemap parse error: {:?}", e);
+                warn!(error = ?e, "sitemap entry parse error");
             }
         }
     }

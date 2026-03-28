@@ -4,7 +4,7 @@ use crate::crawler::{CrawlResult, CrawlStats, RedirectHop};
 use crate::parser::html::HtmlParser;
 use crate::renderer::JsRenderer;
 use crate::storage::db::Database;
-use crate::CrawlConfig;
+use crate::{CrawlConfig, RenderingMode, RobotsMode};
 use reqwest::Client;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use tauri::Emitter;
 use tokio::sync::{mpsc, Semaphore};
 use tokio::time::sleep;
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 /// Curated response headers worth capturing for SEO analysis
@@ -34,8 +35,15 @@ const CAPTURED_HEADERS: &[&str] = &[
 ];
 
 /// Create an empty/error CrawlResult with just basic fields set
-fn empty_result(url: &str, status_code: u16, content_type: String, response_time_ms: u64,
-    content_length: u64, depth: u32, redirect_url: String) -> CrawlResult {
+fn empty_result(
+    url: &str,
+    status_code: u16,
+    content_type: String,
+    response_time_ms: u64,
+    content_length: u64,
+    depth: u32,
+    redirect_url: String,
+) -> CrawlResult {
     CrawlResult {
         url: url.to_string(),
         status_code,
@@ -153,7 +161,11 @@ impl CrawlEngine {
         app: tauri::AppHandle,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let base_url = Url::parse(&config.url)?;
-        let base_host = base_url.domain().unwrap_or_default().trim_start_matches("www.").to_string();
+        let base_host = base_url
+            .domain()
+            .unwrap_or_default()
+            .trim_start_matches("www.")
+            .to_string();
         let base_domain = extract_root_domain(&base_host);
 
         let db = Database::new(&base_domain)?;
@@ -168,10 +180,20 @@ impl CrawlEngine {
         let db_for_task = Database::new(&base_domain)?;
 
         let base_host_clone = base_host.clone();
-        eprintln!("[crawl] spawning crawl_loop for domain={}, host={}", base_domain, base_host_clone);
+        info!(domain = %base_domain, host = %base_host_clone, "spawning crawl_loop");
         tokio::spawn(async move {
-            if let Err(e) = crawl_loop(config, base_domain, base_host_clone, db_for_task, cancel_rx, app, seed_urls).await {
-                eprintln!("[crawl] ERROR in crawl_loop: {}", e);
+            if let Err(e) = crawl_loop(
+                config,
+                base_domain,
+                base_host_clone,
+                db_for_task,
+                cancel_rx,
+                app,
+                seed_urls,
+            )
+            .await
+            {
+                error!(error = %e, "crawl_loop failed");
             }
         });
 
@@ -217,47 +239,23 @@ impl CrawlEngine {
     }
 }
 
-fn extract_root_domain(domain: &str) -> String {
-    let domain = domain.trim_start_matches("www.");
-    let parts: Vec<&str> = domain.split('.').collect();
-
-    let two_part_tlds = [
-        "co.uk", "co.jp", "co.kr", "co.nz", "co.za", "co.in", "co.id",
-        "com.au", "com.br", "com.pl", "com.ua", "com.tr", "com.mx",
-        "com.ar", "com.cn", "com.tw", "com.hk", "com.sg",
-        "org.uk", "org.au", "org.pl",
-        "net.au", "net.pl",
-    ];
-
-    if parts.len() >= 3 {
-        let last_two = format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1]);
-        if two_part_tlds.contains(&last_two.as_str()) && parts.len() >= 3 {
-            return parts[parts.len() - 3..].join(".");
-        }
-    }
-
-    if parts.len() >= 2 {
-        return parts[parts.len() - 2..].join(".");
-    }
-
-    domain.to_string()
-}
+use super::extract_root_domain;
 
 fn is_same_site(url_domain: &str, root_domain: &str) -> bool {
     let url_root = extract_root_domain(url_domain);
     url_root == root_domain
 }
 
-fn passes_url_filters(url: &str, include_regexes: &[regex::Regex], exclude_regexes: &[regex::Regex]) -> bool {
-    if !include_regexes.is_empty() {
-        if !include_regexes.iter().any(|re| re.is_match(url)) {
-            return false;
-        }
+fn passes_url_filters(
+    url: &str,
+    include_regexes: &[regex::Regex],
+    exclude_regexes: &[regex::Regex],
+) -> bool {
+    if !include_regexes.is_empty() && !include_regexes.iter().any(|re| re.is_match(url)) {
+        return false;
     }
-    if !exclude_regexes.is_empty() {
-        if exclude_regexes.iter().any(|re| re.is_match(url)) {
-            return false;
-        }
+    if !exclude_regexes.is_empty() && exclude_regexes.iter().any(|re| re.is_match(url)) {
+        return false;
     }
     true
 }
@@ -316,7 +314,7 @@ async fn crawl_loop(
     app: tauri::AppHandle,
     seed_urls: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    eprintln!("[crawl] crawl_loop started for URL: {}", config.url);
+    info!(url = %config.url, "crawl_loop started");
     let effective_ua = config.effective_user_agent();
     let timeout_secs = config.advanced.response_timeout_seconds as u64;
 
@@ -347,15 +345,26 @@ async fn crawl_loop(
     // Forms-based authentication: login before crawling
     if config.auth.enabled && !config.auth.login_url.is_empty() {
         let mut form_data: Vec<(String, String)> = vec![
-            (config.auth.username_field.clone(), config.auth.username.clone()),
-            (config.auth.password_field.clone(), config.auth.password.clone()),
+            (
+                config.auth.username_field.clone(),
+                config.auth.username.clone(),
+            ),
+            (
+                config.auth.password_field.clone(),
+                config.auth.password.clone(),
+            ),
         ];
         for (k, v) in &config.auth.extra_fields {
             form_data.push((k.clone(), v.clone()));
         }
-        match client.post(&config.auth.login_url).form(&form_data).send().await {
-            Ok(r) => eprintln!("Auth login: status {}", r.status()),
-            Err(e) => eprintln!("Auth login failed: {}", e),
+        match client
+            .post(&config.auth.login_url)
+            .form(&form_data)
+            .send()
+            .await
+        {
+            Ok(r) => info!(status = %r.status(), "auth login completed"),
+            Err(e) => warn!(error = %e, "auth login failed"),
         }
     }
 
@@ -381,20 +390,28 @@ async fn crawl_loop(
             }
         }
     }
-    eprintln!("[crawl] queue seeded with {} URL(s)", queue.len());
+    info!(count = queue.len(), "queue seeded");
 
     // Pre-compile URL filter regexes (avoids recompilation per URL)
-    let include_regexes: Vec<regex::Regex> = config.url_filters.include_patterns.iter()
+    let include_regexes: Vec<regex::Regex> = config
+        .url_filters
+        .include_patterns
+        .iter()
         .filter_map(|pat| regex::Regex::new(pat).ok())
         .collect();
-    let exclude_regexes: Vec<regex::Regex> = config.url_filters.exclude_patterns.iter()
+    let exclude_regexes: Vec<regex::Regex> = config
+        .url_filters
+        .exclude_patterns
+        .iter()
         .filter_map(|pat| regex::Regex::new(pat).ok())
         .collect();
 
-    let mut stats = CrawlStats::default();
-    stats.is_running = true;
-    stats.urls_total = queue.len() as u32;
-    stats.urls_queued = queue.len() as u32;
+    let mut stats = CrawlStats {
+        is_running: true,
+        urls_total: queue.len() as u32,
+        urls_queued: queue.len() as u32,
+        ..CrawlStats::default()
+    };
     let start = Instant::now();
 
     let db_writer = Database::new(&base_domain)?;
@@ -410,51 +427,52 @@ async fn crawl_loop(
             batch.push(result);
             if batch.len() >= 50 {
                 if let Err(e) = db_writer.insert_results_batch(&batch) {
-                    eprintln!("[DB] Batch write failed: {}", e);
+                    error!(error = %e, "batch write to DB failed");
                 }
                 batch.clear();
             }
         }
         if !batch.is_empty() {
             if let Err(e) = db_writer.insert_results_batch(&batch) {
-                eprintln!("[DB] Final batch write failed: {}", e);
+                error!(error = %e, "final batch write to DB failed");
             }
         }
         (total_response_ms, count)
     });
 
     // Conditionally launch headless Chrome for JS rendering
-    let renderer: Option<Arc<JsRenderer>> = if config.rendering.rendering_mode == "javascript" {
-        match JsRenderer::new(
-            config.rendering.ajax_timeout_seconds,
-            config.rendering.viewport_width,
-            config.rendering.viewport_height,
-            &effective_ua,
-        ) {
-            Ok(r) => {
-                eprintln!("JS rendering enabled — Chrome launched successfully");
-                Some(Arc::new(r))
+    let renderer: Option<Arc<JsRenderer>> =
+        if config.rendering.rendering_mode == RenderingMode::Javascript {
+            match JsRenderer::new(
+                config.rendering.ajax_timeout_seconds,
+                config.rendering.viewport_width,
+                config.rendering.viewport_height,
+                &effective_ua,
+            ) {
+                Ok(r) => {
+                    info!("JS rendering enabled — Chrome launched");
+                    Some(Arc::new(r))
+                }
+                Err(e) => {
+                    warn!(error = %e, "Chrome launch failed, falling back to text-only");
+                    None
+                }
             }
-            Err(e) => {
-                eprintln!("Failed to start Chrome for JS rendering: {}. Falling back to text-only.", e);
-                None
-            }
-        }
-    } else {
-        None
-    };
+        } else {
+            None
+        };
 
     // ── Phase 2: Robots.txt enforcement ──
-    let robots_checker: Option<Arc<RobotsChecker>> = if config.robots.mode != "ignore" {
+    let robots_checker: Option<Arc<RobotsChecker>> = if config.robots.mode != RobotsMode::Ignore {
         let base_url = Url::parse(&config.url).ok();
         if let Some(base) = base_url {
             match RobotsChecker::fetch(&client, &base).await {
                 Some(checker) => {
-                    eprintln!("robots.txt fetched — {} sitemap(s) found", checker.sitemaps.len());
+                    info!(sitemaps = checker.sitemaps.len(), "robots.txt fetched");
                     Some(Arc::new(checker))
                 }
                 None => {
-                    eprintln!("No robots.txt found or failed to fetch");
+                    debug!("no robots.txt found or failed to fetch");
                     None
                 }
             }
@@ -473,15 +491,20 @@ async fn crawl_loop(
         } else {
             // Try default /sitemap.xml
             if let Ok(base) = Url::parse(&config.url) {
-                vec![format!("{}://{}/sitemap.xml", base.scheme(), base.host_str().unwrap_or_default())]
+                vec![format!(
+                    "{}://{}/sitemap.xml",
+                    base.scheme(),
+                    base.host_str().unwrap_or_default()
+                )]
             } else {
                 vec![]
             }
         };
 
         if !sitemap_source_urls.is_empty() {
-            let sitemap_results = sitemap_parser::fetch_and_parse_sitemaps(&client, sitemap_source_urls).await;
-            eprintln!("Sitemaps: discovered {} URLs", sitemap_results.len());
+            let sitemap_results =
+                sitemap_parser::fetch_and_parse_sitemaps(&client, sitemap_source_urls).await;
+            info!(count = sitemap_results.len(), "sitemap URLs discovered");
             for sm_url in &sitemap_results {
                 sitemap_urls_set.insert(sm_url.url.clone());
                 if !visited.contains(&sm_url.url) {
@@ -498,7 +521,7 @@ async fn crawl_loop(
     let delay_ms = config.speed.delay_ms;
     let follow_external = config.page_links.external_links;
     let crawl_subdomains = config.page_links.crawl_all_subdomains;
-    let robots_mode = config.robots.mode.clone();
+    let robots_mode = config.robots.mode;
     let show_blocked = config.robots.show_blocked_internal;
 
     let shared_config = Arc::new(config.clone());
@@ -507,33 +530,39 @@ async fn crawl_loop(
 
     // Rate limiter: enforce max_urls_per_second if configured
     let rate_interval: Option<Duration> = if config.speed.max_urls_per_second > 0 {
-        Some(Duration::from_secs_f64(1.0 / config.speed.max_urls_per_second as f64))
+        Some(Duration::from_secs_f64(
+            1.0 / config.speed.max_urls_per_second as f64,
+        ))
     } else {
         None
     };
     let mut last_dispatch = tokio::time::Instant::now();
 
-    eprintln!("[crawl] entering main loop, queue={}, max_depth={}, max_urls={}, rate_limit={:?}", queue.len(), max_depth, max_urls, rate_interval);
+    info!(
+        queue = queue.len(),
+        max_depth,
+        max_urls,
+        ?rate_interval,
+        "entering main crawl loop"
+    );
 
     while !queue.is_empty() {
         if *cancel_rx.borrow() {
-            eprintln!("[crawl] cancelled");
+            info!("crawl cancelled by user");
             break;
         }
 
         if max_urls > 0 && stats.urls_crawled >= max_urls {
-            eprintln!("[crawl] max_urls reached: {}", max_urls);
+            info!(max_urls, "max URL limit reached");
             break;
         }
 
         let batch_size = max_concurrent;
-        let batch: Vec<(String, u32)> = queue
-            .drain(..batch_size.min(queue.len()))
-            .collect();
+        let batch: Vec<(String, u32)> = queue.drain(..batch_size.min(queue.len())).collect();
 
         let mut handles = Vec::new();
 
-        eprintln!("[crawl] batch of {} URL(s)", batch.len());
+        debug!(count = batch.len(), "processing batch");
 
         for (url, depth) in batch {
             if depth > max_depth {
@@ -543,13 +572,14 @@ async fn crawl_loop(
             }
 
             // Phase 2: Robots.txt check before crawling
-            if robots_mode == "respect" {
+            if robots_mode == RobotsMode::Respect {
                 if let Some(ref checker) = shared_robots {
                     let ua = shared_config.effective_user_agent();
                     if !checker.is_allowed(&url, &ua) {
                         if show_blocked {
                             // Emit a blocked result
-                            let mut blocked = empty_result(&url, 0, String::new(), 0, 0, depth, String::new());
+                            let mut blocked =
+                                empty_result(&url, 0, String::new(), 0, 0, depth, String::new());
                             blocked.robots_blocked = true;
                             blocked.in_sitemap = shared_sitemap_set.contains(&url);
                             let _ = result_tx.send(blocked).await;
@@ -582,7 +612,8 @@ async fn crawl_loop(
             let is_in_sitemap = shared_sitemap_set.contains(&url);
 
             let handle = tokio::spawn(async move {
-                let (mut result, discovered) = fetch_and_parse(&client, &url, &base_domain, depth, &cfg, &renderer).await;
+                let (mut result, discovered) =
+                    fetch_and_parse(&client, &url, &base_domain, depth, &cfg, &renderer).await;
                 result.in_sitemap = is_in_sitemap;
                 let _ = result_tx.send(result).await;
                 drop(permit);
@@ -613,7 +644,10 @@ async fn crawl_loop(
 
                     if !follow_external {
                         if let Ok(parsed) = Url::parse(&new_url) {
-                            let domain = parsed.domain().unwrap_or_default().trim_start_matches("www.");
+                            let domain = parsed
+                                .domain()
+                                .unwrap_or_default()
+                                .trim_start_matches("www.");
                             if crawl_subdomains {
                                 if !is_same_site(domain, &base_domain) {
                                     continue;
@@ -646,7 +680,7 @@ async fn crawl_loop(
 
     stats.is_running = false;
     stats.urls_queued = 0;
-    eprintln!("[crawl] finished: {} URLs crawled", stats.urls_crawled);
+    info!(urls_crawled = stats.urls_crawled, "crawl finished");
     let _ = app.emit("crawl-stats", &stats);
     let _ = app.emit("crawl-complete", "done");
 
@@ -675,8 +709,15 @@ async fn fetch_and_parse(
             Ok(r) => r,
             Err(e) => {
                 return (
-                    empty_result(url, 0, String::new(), start.elapsed().as_millis() as u64,
-                        0, depth, format!("Error: {}", e)),
+                    empty_result(
+                        url,
+                        0,
+                        String::new(),
+                        start.elapsed().as_millis() as u64,
+                        0,
+                        depth,
+                        format!("Error: {}", e),
+                    ),
                     vec![],
                 );
             }
@@ -690,7 +731,9 @@ async fn fetch_and_parse(
                 if let Ok(loc_str) = location.to_str() {
                     // Resolve relative redirect URLs
                     let next_url = if let Ok(base) = Url::parse(&current_url) {
-                        base.join(loc_str).map(|u| u.to_string()).unwrap_or_else(|_| loc_str.to_string())
+                        base.join(loc_str)
+                            .map(|u| u.to_string())
+                            .unwrap_or_else(|_| loc_str.to_string())
                     } else {
                         loc_str.to_string()
                     };
@@ -752,8 +795,15 @@ async fn fetch_and_parse(
     };
 
     if !content_type.contains("text/html") {
-        let mut result = empty_result(url, initial_status, content_type, response_time,
-            content_length, depth, redirect_url);
+        let mut result = empty_result(
+            url,
+            initial_status,
+            content_type,
+            response_time,
+            content_length,
+            depth,
+            redirect_url,
+        );
         result.redirect_chain = redirect_chain;
         result.response_headers = response_headers;
         return (result, vec![]);
@@ -762,8 +812,15 @@ async fn fetch_and_parse(
     let body = match final_response.text().await {
         Ok(b) => b,
         Err(_) => {
-            let mut result = empty_result(url, initial_status, content_type, response_time,
-                content_length, depth, redirect_url);
+            let mut result = empty_result(
+                url,
+                initial_status,
+                content_type,
+                response_time,
+                content_length,
+                depth,
+                redirect_url,
+            );
             result.redirect_chain = redirect_chain;
             result.response_headers = response_headers;
             return (result, vec![]);
@@ -777,16 +834,14 @@ async fn fetch_and_parse(
     let analysis_html = if let Some(ref renderer) = renderer {
         let render_url = final_url.clone();
         let renderer_clone = renderer.clone();
-        match tokio::task::spawn_blocking(move || {
-            renderer_clone.render_page(&render_url)
-        }).await {
+        match tokio::task::spawn_blocking(move || renderer_clone.render_page(&render_url)).await {
             Ok(Ok(rendered)) => rendered,
             Ok(Err(e)) => {
-                eprintln!("JS render failed for {}: {}. Using raw HTML.", url, e);
+                warn!(url, error = %e, "JS render failed, using raw HTML");
                 body.clone()
             }
             Err(e) => {
-                eprintln!("JS render task failed for {}: {}. Using raw HTML.", url, e);
+                warn!(url, error = %e, "JS render task panicked, using raw HTML");
                 body.clone()
             }
         }
@@ -803,10 +858,16 @@ async fn fetch_and_parse(
     );
 
     // Phase 4: Compute security flags from response headers before moving
-    let has_hsts = response_headers.iter().any(|(k, _)| k == "strict-transport-security");
-    let has_csp = response_headers.iter().any(|(k, _)| k == "content-security-policy");
+    let has_hsts = response_headers
+        .iter()
+        .any(|(k, _)| k == "strict-transport-security");
+    let has_csp = response_headers
+        .iter()
+        .any(|(k, _)| k == "content-security-policy");
     let has_x_frame_options = response_headers.iter().any(|(k, _)| k == "x-frame-options");
-    let has_x_content_type_options = response_headers.iter().any(|(k, _)| k == "x-content-type-options");
+    let has_x_content_type_options = response_headers
+        .iter()
+        .any(|(k, _)| k == "x-content-type-options");
 
     let discovered: Vec<(String, u32)> = parsed
         .links
@@ -881,7 +942,11 @@ async fn fetch_and_parse(
         h1_all: parsed.h1_all,
         meta_description_count: parsed.meta_description_count,
         lang_attribute: parsed.lang_attribute,
-        raw_html: if config.advanced.store_html || config.rendering.store_rendered_html { body } else { String::new() },
+        raw_html: if config.advanced.store_html || config.rendering.store_rendered_html {
+            body
+        } else {
+            String::new()
+        },
         rendered_html: if config.rendering.store_rendered_html && renderer.is_some() {
             analysis_html
         } else {
