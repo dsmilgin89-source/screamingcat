@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7B7FE8"/>
+      <stop offset="100%" stop-color="#5558CC"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E8E8F0"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="80" fill="url(#bg)"/>
+  <!-- Tech lines behind cat (bowtie/radar shape) -->
+  <polygon points="256,220 100,300 256,380 412,300" fill="none" stroke="#4448A0" stroke-width="6" opacity="0.35"/>
+  <polygon points="256,240 130,300 256,360 382,300" fill="none" stroke="#4448A0" stroke-width="4" opacity="0.25"/>
+  <line x1="256" y1="200" x2="256" y2="400" stroke="#4448A0" stroke-width="3" opacity="0.2"/>
+  <line x1="100" y1="300" x2="412" y2="300" stroke="#4448A0" stroke-width="3" opacity="0.2"/>
+  <!-- Cat head shape -->
+  <path d="M160,280 Q160,170 200,140 L220,100 Q230,95 235,110 L245,155 Q250,150 256,148 Q262,150 267,155 L277,110 Q282,95 292,100 L312,140 Q352,170 352,280 Q352,360 310,385 Q280,400 256,400 Q232,400 202,385 Q160,360 160,280Z" fill="url(#face)"/>
+  <!-- Left ear inner -->
+  <path d="M200,140 L220,100 L235,110 L245,155 Q228,160 215,158Z" fill="#F0C0CC" opacity="0.6"/>
+  <!-- Right ear inner -->
+  <path d="M312,140 L292,100 L277,110 L267,155 Q284,160 297,158Z" fill="#F0C0CC" opacity="0.6"/>
+  <!-- Left eye -->
+  <ellipse cx="218" cy="250" rx="28" ry="18" fill="#2A2A50"/>
+  <ellipse cx="218" cy="250" rx="18" ry="14" fill="#3B5998"/>
+  <ellipse cx="218" cy="250" rx="8" ry="12" fill="#1A1A30"/>
+  <circle cx="224" cy="244" r="4" fill="white" opacity="0.7"/>
+  <!-- Right eye -->
+  <ellipse cx="294" cy="250" rx="28" ry="18" fill="#2A2A50"/>
+  <ellipse cx="294" cy="250" rx="18" ry="14" fill="#3B5998"/>
+  <ellipse cx="294" cy="250" rx="8" ry="12" fill="#1A1A30"/>
+  <circle cx="300" cy="244" r="4" fill="white" opacity="0.7"/>
+  <!-- Angry eyebrows -->
+  <path d="M190,228 Q210,238 248,232" stroke="#2A2A50" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M322,228 Q302,238 264,232" stroke="#2A2A50" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Squint/angry eyelid lines -->
+  <path d="M193,242 Q218,234 245,242" fill="#E0DDE8" opacity="0.7"/>
+  <path d="M319,242 Q294,234 267,242" fill="#E0DDE8" opacity="0.7"/>
+  <!-- Nose -->
+  <path d="M249,290 Q256,282 263,290 Q256,296 249,290Z" fill="#2A2A50"/>
+  <!-- Nose line down -->
+  <line x1="256" y1="294" x2="256" y2="310" stroke="#2A2A50" stroke-width="3" stroke-linecap="round"/>
+  <!-- Open screaming mouth -->
+  <path d="M218,310 Q225,305 256,310 Q287,305 294,310 Q294,355 280,370 Q265,380 256,380 Q247,380 232,370 Q218,355 218,310Z" fill="#1A1A30"/>
+  <!-- Upper mouth curve -->
+  <path d="M218,310 Q256,320 294,310" fill="none" stroke="#333366" stroke-width="2"/>
+  <!-- Teeth/fangs -->
+  <path d="M230,310 L234,328 L238,310" fill="white"/>
+  <path d="M274,310 L278,328 L282,310" fill="white"/>
+  <!-- Tongue -->
+  <ellipse cx="256" cy="360" rx="18" ry="14" fill="#CC4466"/>
+  <ellipse cx="256" cy="355" rx="12" ry="8" fill="#DD5577" opacity="0.6"/>
+  <!-- Whisker dots -->
+  <circle cx="232" cy="296" r="2.5" fill="#C0BDD0"/>
+  <circle cx="240" cy="300" r="2.5" fill="#C0BDD0"/>
+  <circle cx="272" cy="300" r="2.5" fill="#C0BDD0"/>
+  <circle cx="280" cy="296" r="2.5" fill="#C0BDD0"/>
+  <!-- Whiskers left -->
+  <line x1="170" y1="275" x2="210" y2="285" stroke="#C0BDD0" stroke-width="2" opacity="0.5"/>
+  <line x1="168" y1="295" x2="210" y2="295" stroke="#C0BDD0" stroke-width="2" opacity="0.5"/>
+  <line x1="170" y1="315" x2="210" y2="305" stroke="#C0BDD0" stroke-width="2" opacity="0.5"/>
+  <!-- Whiskers right -->
+  <line x1="342" y1="275" x2="302" y2="285" stroke="#C0BDD0" stroke-width="2" opacity="0.5"/>
+  <line x1="344" y1="295" x2="302" y2="295" stroke="#C0BDD0" stroke-width="2" opacity="0.5"/>
+  <line x1="342" y1="315" x2="302" y2="305" stroke="#C0BDD0" stroke-width="2" opacity="0.5"/>
+</svg>

@@ -1,0 +1,45 @@
+[package]
+name = "screaming-cat"
+version = "0.1.0"
+edition = "2021"
+description = "SEO Spider Crawler - Desktop Application"
+
+[lib]
+name = "screaming_cat_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "screaming-cat"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["cookies", "gzip", "brotli", "deflate", "json"] }
+scraper = "0.22"
+url = { version = "2", features = ["serde"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+robotstxt = "0.3"
+sitemap = "0.4"
+tauri-plugin-dialog = "2.6.0"
+headless_chrome = "1"
+open = "5"
+md5 = "0.7"
+num_cpus = "1"
+dirs = "6"
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
